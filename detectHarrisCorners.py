@@ -52,8 +52,6 @@ def detectHarrisCorners(image, gaussianSigma, neighborhoodSize, nmsRadius, desir
         corners.append(maxLoc)
         cv2.circle(Rblur, maxLoc, nmsRadius, (0, 0, 0), thickness=-1) # Suppres all pixels in NMS RADIUS
 
-    # Scale the R-score image from [-1.0 -> 1.0] to [0 -> 255]
-    R = R/2 + 0.5
 
     # Return the image and corner locations
     return corners, R

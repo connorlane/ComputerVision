@@ -2,25 +2,35 @@
 
 import cv2
 import sys
+import numpy as np
 from detectHarrisCorners import detectHarrisCorners
 
-NUM_ARGUMENTS = 4
-USAGE_MESSAGE = sys.argv[0] + " <inputImagePath> <outputImagePath> <rscoreImagePath>"
+NUM_ARGUMENTS = 8
+USAGE_MESSAGE = sys.argv[0] + " <inputImagePath> <outputImagePath> <rscoreImagePath> <gaussianSigma> <neighborhoodSize> <nmsRadius> <desiredNumberOfCorners>"
 
 if len(sys.argv) != NUM_ARGUMENTS:
     print USAGE_MESSAGE
-    exit(-1)
+    sys.exit(-1)
 
 # Parse the input files
-inputImagePath = sys.argv[1]
-outputImagePath = sys.argv[2]
-rscoreImagePath = sys.argv[3]
+inputImagePath         = sys.argv[1]
+outputImagePath        = sys.argv[2]
+rscoreImagePath        = sys.argv[3]
+gaussianSigma          = float(sys.argv[4])
+neighborhoodSize       = int(sys.argv[5])
+nmsRadius              = int(sys.argv[6])
+desiredNumberOfCorners = int(sys.argv[7])
 
 # Read the input image from file
 image = cv2.imread(inputImagePath)
 
 # Run the harris corner detection algorithm
-corners, R = detectHarrisCorners(image, 3, 7, 10, 100)
+corners, R = detectHarrisCorners(image, gaussianSigma, neighborhoodSize, nmsRadius, desiredNumberOfCorners)
+
+# Normalize the R-Score values for easier viewing
+R = R - np.amin(R)
+R = 255 * R / np.amax(R)
+R = R.astype(np.uint8)
 
 # Print the corner coordinates
 print "Corner coordinates:"
