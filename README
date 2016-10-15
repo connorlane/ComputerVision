@@ -1,0 +1,20 @@
+How to Run:
+
+The code for this project is written in Python. I have included a linux binary executable of the program. It runs sucessfully on 64-bit Ubuntu 16.04
+
+To run the python script directly, a couple of basic dependencies are required:
+
+Python 2.7
+Numpy - http://www.numpy.org/
+OpenCV - http://docs.opencv.org/
+
+Note: On most systems, these can be installed with PIP quite easily:
+pip install numpy
+pip install opencv
+
+To run the script, run "python main.py". The script will then display the usage string (input file names, output file names, and harris parameters)
+
+The report is in the file called "cs5404-assignment2-ConnorCoward-report.pdf"
+
+Images for testing are in the "img" folder
+
