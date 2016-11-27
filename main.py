@@ -4,9 +4,13 @@ import cv2
 import sys
 import numpy as np
 from detectHarrisCorners import detectHarrisCorners
+import random
 
 X = 0
 Y = 1
+
+INLIER_DISTANCE_THRESHOLD = 25
+REQUIRED_INLIERS = 30
 
 # Get a patch from the image with the specified center and size
 #   Returns: the image patch as a numpy array with <size> columns and <size> rows
@@ -98,27 +102,54 @@ def matchFeatures(image1, image2, features1, features2, detectionPatchSize):
     return matches
 
 def findHomography_OpenCV(src_pts, dst_pts):
-    src_np = np.asarray(src_pts)
-    dst_np = np.asarray(dst_pts)
+    src_np = np.asarray(src_pts, dtype=np.float32)
+    dst_np = np.asarray(dst_pts, dtype=np.float32)
     M, mask = cv2.findHomography(src_np, dst_np)
     return M
 
-def filterRANSAC(matches):
+def filterRANSAC(matches, distance_threshold, required_inliers, refinement_iterations):
     # Repeat M times
+    bestNumberOfInliers = 0
+    while bestNumberOfInliers < required_inliers:
         # Randomly sample four from matches
-
+        selectedKeys = random.sample(matches, 4)
+        selectedValues = [matches[k] for k in selectedKeys]
+        
         # Estimate homography from the matches 
+        H = findHomography_OpenCV(selectedKeys, selectedValues)
+        print H
+
+        inlierKeys = []
+        # Find inlier set
+        for src_pt in matches:
+            dst_pt = matches[src_pt]
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
+            euclideanDistance = ((dst_pt[0] - warped_dst_pt[0])**2 + (dst_pt[1] - warped_dst_pt[1])**2)**0.5
+            if euclideanDistance < distance_threshold:
+                inlierKeys.append(src_pt)
+
+        if len(inlierKeys) > bestNumberOfInliers:
+            bestNumberOfInliers = len(inlierKeys)
+            
+    # Refine N times
+    for _ in range(refinement_iterations):
+        # Estimate the homography based on inlier set
+        inlierValues = [matches[k] for k in inlierKeys]
+        H = findHomography_OpenCV(inlierKeys, inlierValues)
+
+        # Find new inlier set
+        inlierKeys = []
 
         # Find inlier set
-
-        # If the number of inliers is enough
-            # Refine N times
-                # Estimate the homography based on inlier set
-                # Find new inlier set
-
-        # If number of inliers in refined inlier set is more than previous iteration, save
+        for src_pt in matches:
+            dst_pt = matches[src_pt]
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
+            euclideanDistance = ((dst_pt[0] - warped_dst_pt[0])**2 + (dst_pt[1] - warped_dst_pt[1])**2)**0.5
+            if euclideanDistance < INLIER_DISTANCE_THRESHOLD:
+                inlierKeys.append(src_pt)
 
     # Save the inlier set
+    return inlierKeys
 
 # Define command line argument constants & strings
 NUM_ARGUMENTS = 9
@@ -151,7 +182,7 @@ corners2, R2 = detectHarrisCorners(image2, gaussianSigma, neighborhoodSize, nmsR
 matches = matchFeatures(image1, image2, corners1, corners2, detectionPatchSize)
 
 # Filter matches using RANSAC
-matches = filterRANSAC(matches)
+filtered_src_pts = filterRANSAC(matches, 255 * 0.1, desiredNumberOfCorners * 0.4, 10)
 
 # Construct an image for visualizing the matches
 visWidth = image1.shape[1] + image2.shape[1]
@@ -161,7 +192,7 @@ visImage[:image1.shape[0], :image1.shape[1],:] = image1
 visImage[:image2.shape[0], image1.shape[1]:,:] = image2
 
 # Draw lines & circles for each match from image1 to image2
-for key in matches:
+for key in filtered_src_pts:
     bestCenter = matches[key]
     visSource = key
     visDestination = (bestCenter[0] + image1.shape[1], bestCenter[1])
