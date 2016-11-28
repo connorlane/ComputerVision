@@ -174,10 +174,9 @@ def warpBackward(src_image, h, dst_image):
     # Return the warped image
     return imageWarped
 
-def filterRANSAC(matches, distance_threshold, required_inliers, refinement_iterations):
-    # Repeat M times
+def filterRANSAC(matches, distance_threshold, inlier_iterations, refinement_iterations):
     bestNumberOfInliers = 0
-    while bestNumberOfInliers < required_inliers:
+    for _ in range(inlier_iterations):
         # Randomly sample four from matches
         selectedKeys = random.sample(matches, 4)
         selectedValues = [matches[k] for k in selectedKeys]
@@ -185,19 +184,22 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         # Estimate homography from the matches 
         H = findHomography_OpenCV(selectedKeys, selectedValues)
 
-        inlierKeys = []
+        selectedInlierKeys = []
         # Find inlier set
         for src_pt in matches:
             dst_pt = matches[src_pt]
-            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
-            euclideanDistance = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1]))/2
-            if euclideanDistance < distance_threshold:
-                inlierKeys.append(src_pt)
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])
+            warped_dst_pt = warped_dst_pt / warped_dst_pt[2]
+            distanceEstimator = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1])) / 2
+            if distanceEstimator < distance_threshold:
+                selectedInlierKeys.append(src_pt)
 
-        if len(inlierKeys) > bestNumberOfInliers:
-            bestNumberOfInliers = len(inlierKeys)
-            
-    # Refine N times
+        if len(selectedInlierKeys) > bestNumberOfInliers:
+            bestNumberOfInliers = len(selectedInlierKeys)
+            inlierKeys = selectedInlierKeys
+
+    print "Best number of inliers: ", bestNumberOfInliers
+
     for _ in range(refinement_iterations):
         # Estimate the homography based on inlier set
         inlierValues = [matches[k] for k in inlierKeys]
@@ -209,9 +211,10 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         # Find inlier set
         for src_pt in matches:
             dst_pt = matches[src_pt]
-            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
-            euclideanDistance = (abs(dst_pt[0] - warped_dst_pt[0])**2 + abs(dst_pt[1] - warped_dst_pt[1]))/2
-            if euclideanDistance < distance_threshold:
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])
+            warped_dst_pt = warped_dst_pt / warped_dst_pt[2]
+            distanceEstimator = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1])) / 2
+            if distanceEstimator < distance_threshold:
                 inlierKeys.append(src_pt)
 
     # Return the inlier keys and homography matrix
@@ -247,13 +250,59 @@ corners2, R2 = detectHarrisCorners(image2, gaussianSigma, neighborhoodSize, nmsR
 # Find the best matches between the two images
 matches = matchFeatures(image1, image2, corners1, corners2, detectionPatchSize)
 
+# Construct an image for visualizing the matches
+visWidth = image1.shape[1] + image2.shape[1]
+visHeight = max(image1.shape[0], image2.shape[0])
+visImage = np.zeros((visHeight, visWidth, 3), dtype=np.uint8)
+visImage[:image1.shape[0], :image1.shape[1],:] = image1
+visImage[:image2.shape[0], image1.shape[1]:,:] = image2
+
+# Draw lines & circles for each match from image1 to image2
+for key in matches:
+    bestCenter = matches[key]
+    visSource = key
+    visDestination = (bestCenter[0] + image1.shape[1], bestCenter[1])
+
+    cv2.line(visImage, visSource, visDestination, (255, 0, 0), 1)
+
+    cv2.circle(visImage, visSource, 7, (0, 255, 0))
+    cv2.circle(visImage, visDestination, 7, (0, 0, 255))
+
+# Display the resulting image
+cv2.imshow('visImage', visImage)
+cv2.waitKey(0)
+
 # Filter matches using RANSAC
-filtered_src_pts, H = filterRANSAC(matches, 255 * 0.2, desiredNumberOfCorners * 0.25, 0)
+filtered_src_pts, H = filterRANSAC(matches, 5, 1000, 100)
+
+# Construct an image for visualizing the matches
+visWidth = image1.shape[1] + image2.shape[1]
+visHeight = max(image1.shape[0], image2.shape[0])
+visImage = np.zeros((visHeight, visWidth, 3), dtype=np.uint8)
+visImage[:image1.shape[0], :image1.shape[1],:] = image1
+visImage[:image2.shape[0], image1.shape[1]:,:] = image2
+
+# Draw lines & circles for each match from image1 to image2
+for key in filtered_src_pts:
+    bestCenter = matches[key]
+    visSource = key
+    visDestination = (bestCenter[0] + image1.shape[1], bestCenter[1])
+
+    cv2.line(visImage, visSource, visDestination, (255, 0, 0), 1)
+
+    cv2.circle(visImage, visSource, 7, (0, 255, 0))
+    cv2.circle(visImage, visDestination, 7, (0, 0, 255))
+
+# Display the resulting image
+cv2.imshow('Matches - Filtered', visImage)
+cv2.waitKey(0)
+
 
 print H
 print filtered_src_pts
 
 rows, columns, depth = image1.shape
+rows2, columns2, depth2 = image2.shape
 corners = np.array([[0, columns - 1,        0, columns - 1],
                     [0,           0, rows - 1,    rows - 1],
                     [1,           1,        1,           1]])
@@ -278,17 +327,17 @@ print "x_max: ", x_max
 print "y_max: ", y_max
 
 x_offset = -min(0, x_min)
-x_size = max(x_max, columns - 1) + x_offset + 1
+x_size = max(x_max, columns2 - 1) + x_offset + 1
 y_offset = -min(0, y_min)
-y_size = max(y_max, rows - 1) + y_offset + 1
+y_size = max(y_max, rows2 - 1) + y_offset + 1
 
 print "x_offset: ", x_offset
 print "y_offset: ", y_offset
 print "x_size: ", x_size
 print "y_size: ", y_size
 
-stitchedImage = np.zeros((y_size + 200, x_size + 200, 3), dtype=np.uint8)
-stitchedImage[y_offset:rows + y_offset, x_offset:columns + x_offset] = image2
+stitchedImage = np.zeros((y_size, x_size, 3), dtype=np.uint8)
+stitchedImage[y_offset:rows2 + y_offset, x_offset:columns2 + x_offset] = image2
 
 # Calculate the inverse of h for performing backward warping
 h_inv = np.linalg.inv(H)
@@ -325,37 +374,11 @@ for x in range(x_min, x_max - 1):
 
 #warpedImage = cv2.warpPerspective(image1, H, (x_size + 200, y_size + 200), dst=stitchedImage)
 cv2.imshow('Stitched Image', stitchedImage)
-
-# Construct an image for visualizing the matches
-visWidth = image1.shape[1] + image2.shape[1]
-visHeight = max(image1.shape[0], image2.shape[0])
-visImage = np.zeros((visHeight, visWidth, 3), dtype=np.uint8)
-visImage[:image1.shape[0], :image1.shape[1],:] = image1
-visImage[:image2.shape[0], image1.shape[1]:,:] = image2
-
-# Draw lines & circles for each match from image1 to image2
-for key in filtered_src_pts:
-    bestCenter = matches[key]
-    visSource = key
-    visDestination = (bestCenter[0] + image1.shape[1], bestCenter[1])
-
-    cv2.line(visImage, visSource, visDestination, (255, 0, 0), 1)
-
-    cv2.circle(visImage, visSource, 7, (0, 255, 0))
-    cv2.circle(visImage, visDestination, 7, (0, 0, 255))
-
-# Display the resulting image
-cv2.imshow('visImage', visImage)
-
-# Display warped image
-warpedImage = cv2.warpPerspective(image1, H, (1000, 1000), dst=image2)
-cv2.imshow('warpedImage', warpedImage)
-
 cv2.waitKey(0)
 
 # Save the visulaization image
 print "Saving the image..."
-cv2.imwrite(outputImagePath, visImage)
+cv2.imwrite(outputImagePath, stitchedImage)
 
 # Save the resulting image
 
