@@ -190,7 +190,7 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         for src_pt in matches:
             dst_pt = matches[src_pt]
             warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
-            euclideanDistance = ((dst_pt[0] - warped_dst_pt[0])**2 + (dst_pt[1] - warped_dst_pt[1])**2)**0.5
+            euclideanDistance = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1]))/2
             if euclideanDistance < distance_threshold:
                 inlierKeys.append(src_pt)
 
@@ -210,8 +210,8 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         for src_pt in matches:
             dst_pt = matches[src_pt]
             warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
-            euclideanDistance = ((dst_pt[0] - warped_dst_pt[0])**2 + (dst_pt[1] - warped_dst_pt[1])**2)**0.5
-            if euclideanDistance < INLIER_DISTANCE_THRESHOLD:
+            euclideanDistance = (abs(dst_pt[0] - warped_dst_pt[0])**2 + abs(dst_pt[1] - warped_dst_pt[1]))/2
+            if euclideanDistance < distance_threshold:
                 inlierKeys.append(src_pt)
 
     # Return the inlier keys and homography matrix
@@ -248,7 +248,7 @@ corners2, R2 = detectHarrisCorners(image2, gaussianSigma, neighborhoodSize, nmsR
 matches = matchFeatures(image1, image2, corners1, corners2, detectionPatchSize)
 
 # Filter matches using RANSAC
-filtered_src_pts, H = filterRANSAC(matches, 255 * 0.2, desiredNumberOfCorners * 0.4, 10)
+filtered_src_pts, H = filterRANSAC(matches, 255 * 0.2, desiredNumberOfCorners * 0.25, 0)
 
 print H
 print filtered_src_pts
@@ -311,7 +311,7 @@ for x in range(x_min, x_max - 1):
         #print "y_orig: ", y_orig
 
         # If out of bounds on the original image
-        if x_orig >= columns or y_orig >= rows or x_orig < 0 or y_orig < 0:
+        if x_orig >= rows or y_orig >= columns or x_orig < 0 or y_orig < 0:
             #imageWarped[x + x_offset, y + y_offset] = 0
             #print (columns, rows)
             #print (x_orig, y_orig), " out of bounds"
