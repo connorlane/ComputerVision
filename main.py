@@ -5,11 +5,12 @@ import sys
 import numpy as np
 from detectHarrisCorners import detectHarrisCorners
 import random
+import math
 
 X = 0
 Y = 1
 
-INLIER_DISTANCE_THRESHOLD = 25
+INLIER_DISTANCE_THRESHOLD = 50
 REQUIRED_INLIERS = 30
 
 # Get a patch from the image with the specified center and size
@@ -107,6 +108,72 @@ def findHomography_OpenCV(src_pts, dst_pts):
     M, mask = cv2.findHomography(src_np, dst_np)
     return M
 
+def warpBackward(src_image, h, dst_image):
+    # Find the four corners
+    columns, rows, depth = src_image.shape
+    corners = [[0], [0], [1]], [[rows - 1], [0], [1]], [[0], [columns - 1], [1]], [[rows - 1], [columns - 1], [1]]
+    mapped_corners = np.dot(corners, h)
+    print mapped_corners
+
+    # Use the four corners to calculate the destination image size for the warped image
+    x_min = 256
+    y_min = 256
+    x_max = 0
+    y_max = 0
+    for corner in corners:
+        corner_warped = np.dot(h, corner)
+        corner_warped = corner_warped / corner_warped[2]
+        x = int(corner_warped[1])
+        y = int(corner_warped[0])
+
+        if x < x_min:
+            x_min = x
+        if x > x_max:
+            x_max = x
+        if y < y_min:
+            y_min = y
+        if y > y_max:
+            y_max = y
+
+    x_offset = min(x_min, 0)
+    y_offset = min(y_min, 0)
+    x_size = max(src_image.shape[0], x_max)
+    y_size = max(src_image.shape[1], y_max)
+
+    print "x_offset: ", x_offset
+    print "y_offset: ", y_offset
+    print "x_size: ", x_size
+    print "y_size: ", y_size
+    
+    # Calculate the inverse of h for performing backward warping
+    h_inv = np.linalg.inv(h)
+    h_inv = h_inv / h_inv[2, 2]
+
+    # Create a blank image of the necessary size
+    imageWarped = np.zeros((x_size + 1, y_size + 1, 3), dtype=np.uint8)
+    visImage[x_offset:x_offset+src_image.shape[0], y_offset:y_offset+src_image.shape[1],:] = src_image
+
+    # For each x, y in the destination image
+    for x in range(x_offset, x_min + x_size):
+        for y in range(y_min, y_min + y_size):
+
+            # Calculate the coordinates in the orignal image
+            locOrig = np.dot(h_inv, [[y],[x],[1]])
+            locOrig = locOrig / locOrig[2]
+
+            # Round to nearest location
+            x_orig = int(round(locOrig[1]))
+            y_orig = int(round(locOrig[0]))
+
+            # If out of bounds on the original image
+            if x_orig >= src_image.shape[0] or y_orig >= src_image.shape[1] or x_orig < 0 or y_orig < 0:
+                imageWarped[x - x_min, y - y_min] = 0
+            else:
+                imageWarped[x - x_min, y - y_min] = src_image[x_orig, y_orig]
+
+    # Return the warped image
+    return imageWarped
+
 def filterRANSAC(matches, distance_threshold, required_inliers, refinement_iterations):
     # Repeat M times
     bestNumberOfInliers = 0
@@ -117,7 +184,6 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         
         # Estimate homography from the matches 
         H = findHomography_OpenCV(selectedKeys, selectedValues)
-        print H
 
         inlierKeys = []
         # Find inlier set
@@ -148,8 +214,8 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
             if euclideanDistance < INLIER_DISTANCE_THRESHOLD:
                 inlierKeys.append(src_pt)
 
-    # Save the inlier set
-    return inlierKeys
+    # Return the inlier keys and homography matrix
+    return inlierKeys, H
 
 # Define command line argument constants & strings
 NUM_ARGUMENTS = 9
@@ -182,7 +248,83 @@ corners2, R2 = detectHarrisCorners(image2, gaussianSigma, neighborhoodSize, nmsR
 matches = matchFeatures(image1, image2, corners1, corners2, detectionPatchSize)
 
 # Filter matches using RANSAC
-filtered_src_pts = filterRANSAC(matches, 255 * 0.1, desiredNumberOfCorners * 0.4, 10)
+filtered_src_pts, H = filterRANSAC(matches, 255 * 0.2, desiredNumberOfCorners * 0.4, 10)
+
+print H
+print filtered_src_pts
+
+rows, columns, depth = image1.shape
+corners = np.array([[0, columns - 1,        0, columns - 1],
+                    [0,           0, rows - 1,    rows - 1],
+                    [1,           1,        1,           1]])
+
+#corners = np.transpose(corners)
+
+print corners
+print "Columns: ", columns
+print "Rows: ", rows
+mapped_corners = np.dot(H, corners)
+mapped_corners.T[:] = [row / row[2] for row in mapped_corners.T]
+mapped_corners = mapped_corners[:2].T
+print mapped_corners
+print mapped_corners[:, :1]
+x_min = int(math.floor(min(mapped_corners[:, :1])))
+y_min = int(math.floor(min(mapped_corners[:, 1:])))
+x_max = int(math.ceil(max(mapped_corners[:, :1])))
+y_max = int(math.ceil(max(mapped_corners[:, 1:])))
+print "x_min: ", x_min
+print "y_min: ", y_min
+print "x_max: ", x_max
+print "y_max: ", y_max
+
+x_offset = -min(0, x_min)
+x_size = max(x_max, columns - 1) + x_offset + 1
+y_offset = -min(0, y_min)
+y_size = max(y_max, rows - 1) + y_offset + 1
+
+print "x_offset: ", x_offset
+print "y_offset: ", y_offset
+print "x_size: ", x_size
+print "y_size: ", y_size
+
+stitchedImage = np.zeros((y_size + 200, x_size + 200, 3), dtype=np.uint8)
+stitchedImage[y_offset:rows + y_offset, x_offset:columns + x_offset] = image2
+
+# Calculate the inverse of h for performing backward warping
+h_inv = np.linalg.inv(H)
+h_inv = h_inv / h_inv[2, 2]
+
+# For each x, y in the destination image
+
+for x in range(x_min, x_max - 1):
+    for y in range(y_min, y_max - 1):
+
+        # Calculate the coordinates in the orignal image
+        locOrig = np.dot(h_inv, [[x],[y],[1]])
+        locOrig = locOrig / locOrig[2]
+
+        # Round to nearest location
+        x_orig = int(round(locOrig[1]))
+        y_orig = int(round(locOrig[0]))
+
+        #print "x_orig: ", x_orig
+        #print "y_orig: ", y_orig
+
+        # If out of bounds on the original image
+        if x_orig >= columns or y_orig >= rows or x_orig < 0 or y_orig < 0:
+            #imageWarped[x + x_offset, y + y_offset] = 0
+            #print (columns, rows)
+            #print (x_orig, y_orig), " out of bounds"
+            pass
+        else:
+            #print "Setting: " , (x, y)
+            #print (columns, rows)
+            #print (x_orig, y_orig), " out of bounds"
+            #print (x_orig, y_orig), " in bounds -> ", (x + x_offset, y + y_offset)
+            stitchedImage[y + y_offset, x + x_offset] = image1[x_orig, y_orig]
+
+#warpedImage = cv2.warpPerspective(image1, H, (x_size + 200, y_size + 200), dst=stitchedImage)
+cv2.imshow('Stitched Image', stitchedImage)
 
 # Construct an image for visualizing the matches
 visWidth = image1.shape[1] + image2.shape[1]
@@ -204,6 +346,11 @@ for key in filtered_src_pts:
 
 # Display the resulting image
 cv2.imshow('visImage', visImage)
+
+# Display warped image
+warpedImage = cv2.warpPerspective(image1, H, (1000, 1000), dst=image2)
+cv2.imshow('warpedImage', warpedImage)
+
 cv2.waitKey(0)
 
 # Save the visulaization image
