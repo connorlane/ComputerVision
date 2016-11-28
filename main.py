@@ -192,7 +192,8 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         # Find inlier set
         for src_pt in matches:
             dst_pt = matches[src_pt]
-            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])
+            warped_dst_pt = warped_dst_pt / warped_dst_pt[2]
             distanceEstimator = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1])) / 2
             if distanceEstimator < distance_threshold:
                 inlierKeys.append(src_pt)
@@ -202,9 +203,6 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
 
     print "Num Inliers: ", bestNumberOfInliers
 
-    print "Refined inlier keys: ", len(inlierKeys)
-
-    """ 
     for _ in range(refinement_iterations):
         # Estimate the homography based on inlier set
         inlierValues = [matches[k] for k in inlierKeys]
@@ -216,13 +214,13 @@ def filterRANSAC(matches, distance_threshold, required_inliers, refinement_itera
         # Find inlier set
         for src_pt in matches:
             dst_pt = matches[src_pt]
-            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])[:2]
+            warped_dst_pt = np.dot(H, [[src_pt[0]], [src_pt[1]], [1]])
+            warped_dst_pt = warped_dst_pt / warped_dst_pt[2]
             distanceEstimator = (abs(dst_pt[0] - warped_dst_pt[0]) + abs(dst_pt[1] - warped_dst_pt[1])) / 2
             if distanceEstimator < distance_threshold:
                 inlierKeys.append(src_pt)
 
             print "Refined inlier keys: ", len(inlierKeys)
-    """
 
     # Return the inlier keys and homography matrix
     return inlierKeys, H
@@ -280,7 +278,7 @@ cv2.imshow('visImage', visImage)
 cv2.waitKey(0)
 
 # Filter matches using RANSAC
-filtered_src_pts, H = filterRANSAC(matches, 255 * 0.1, desiredNumberOfCorners * 0.2, 0)
+filtered_src_pts, H = filterRANSAC(matches, 256 * 0.1, desiredNumberOfCorners * 0.10, 100)
 
 # Construct an image for visualizing the matches
 visWidth = image1.shape[1] + image2.shape[1]
