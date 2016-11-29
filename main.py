@@ -1,22 +1,25 @@
 #!/usr/bin/env python
 
+# External imports
 import cv2
 import sys
 from detectHarrisCorners import detectHarrisCorners
 import random
 import math
 
+# Local imports
 import matching
 import homography
 
 # Define command line argument constants & strings
 NUM_ARGUMENTS = 9
 USAGE_MESSAGE = "Usage: " + sys.argv[0] + " <inputImagePath1> <inputImagePath2> <outputImagePath> <gaussianSigma> <neighborhoodSize> <nmsRadius> <desiredNumberOfCorners> <detectionPatchSize>"
+SUGGESTED_COMMAND = "Suggested command: " + sys.argv[0] + " img/door1.jpg img/door2.jpg output.jpg 1.2 10 10 200 10"
 
 # Display usage message if the number of arguments is wrong
 if len(sys.argv) != NUM_ARGUMENTS:
     print USAGE_MESSAGE
-    print "Suggested command: " + sys.argv[0] + " img/door1.jpg img/door2.jpg output.jpg 1.2 10 10 200 10"
+    print SUGGESTED_COMMAND
     sys.exit(-1)
 
 # Parse the input files

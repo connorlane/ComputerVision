@@ -34,7 +34,6 @@ def calculateSimilarity(patch1, patch2):
 #  Finds the best matches between points in the source image and points in the test image
 #  Returns: dictionary with keys as points in the source image and values as the best corresponding
 #           point matches in the test image
-
 def findBestMatches(sourcePositions, sourceImage, testPositions, testImage, patchSize):
     bestScoreMap = dict()
 
@@ -94,6 +93,7 @@ def matchFeatures(image1, image2, corners1, corners2, detectionPatchSize):
 
     return matches
 
+# Displays the two images side by side with connecting lines & circles
 def displayMatches(image1, image2, matches, windowName):
     # Construct an image for visualizing the matches
     visWidth = image1.shape[1] + image2.shape[1]
@@ -117,6 +117,7 @@ def displayMatches(image1, image2, matches, windowName):
     cv2.imshow(windowName, visImage)
     cv2.waitKey(0)
 
+# Filters the matches based on a homography model using RANSAC algorithm
 def filterRANSAC(matches, distance_threshold, inlier_iterations, refinement_iterations):
     bestNumberOfInliers = 0
     for _ in range(inlier_iterations):

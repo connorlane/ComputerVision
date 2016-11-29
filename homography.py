@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-# Find using SVD
+# Find homography matrix using SVD
 def findHomography(src_pts, dst_pts):
     if len(src_pts) != len(dst_pts):
         return -1
@@ -29,6 +29,8 @@ def findHomography(src_pts, dst_pts):
 
     return h
 
+# Warps image1 using homography matrix H and overlays it onto image2
+# Returns: new stitched image with image1 overlayed onto image2
 def stitchImages(image1, image2, H):
     rows, columns, depth = image1.shape
     rows2, columns2, depth2 = image2.shape
@@ -74,5 +76,4 @@ def stitchImages(image1, image2, H):
                 stitchedImage[y + y_offset, x + x_offset] = image1[x_orig, y_orig]
 
     return stitchedImage
-
 
